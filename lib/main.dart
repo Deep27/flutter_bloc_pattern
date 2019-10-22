@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc_pattern/counter_bloc.dart';
-import 'package:flutter_bloc_pattern/counter_event.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_bloc_pattern/bloc/bloc.dart';
+import 'package:flutter_bloc_pattern/model/weather.dart';
+import 'package:logger/logger.dart';
 
 void main() => runApp(MyApp());
 
+final Logger _LOG = Logger();
+
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -13,73 +16,114 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: WeatherPage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
+class WeatherPage extends StatefulWidget {
+  WeatherPage({Key key}) : super(key: key);
 
-  final String title;
-
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _WeatherPageState createState() => _WeatherPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  final _bloc = CounterBloc();
+class _WeatherPageState extends State<WeatherPage> {
+  final weatherBloc = WeatherBloc();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text("Fake Weather App"),
       ),
-      body: Center(
-        child: StreamBuilder(
-          stream: _bloc.counter,
-          initialData: 0,
-          builder: (BuildContext context, AsyncSnapshot<int> snapshot) {
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text(
-                  'You have pushed the button this many times:',
-                ),
-                Text(
-                  '${snapshot.data}',
-                  style: Theme.of(context).textTheme.display1,
-                ),
-              ],
-            );
-          },
+      body: BlocProvider<WeatherBloc>(
+        builder: (context) => weatherBloc,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          alignment: Alignment.center,
+          child: BlocBuilder<WeatherBloc, WeatherState>(
+            bloc: weatherBloc,
+            builder: (BuildContext context, WeatherState state) {
+              if (state is WeatherInitial) {
+                _LOG.i('Initial state.');
+                return _buildInitialInput();
+              } else if (state is WeatherLoading) {
+                _LOG.i('Leading state.');
+                return _buildLoading();
+              } else if (state is WeatherLoaded) {
+                _LOG.i('Loaded state.');
+                return _buildColumnWithData(state.weather);
+              } else {
+                _LOG.i('Again Initial state.');
+                return _buildInitialInput();
+              }
+            },
+          ),
         ),
       ),
-      floatingActionButton: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: <Widget>[
-          FloatingActionButton(
-            onPressed: () => _bloc.counterEventSink.add(IncrementEVent()),
-            tooltip: 'Increment',
-            child: Icon(Icons.add),
+    );
+  }
+
+  Widget _buildInitialInput() => Center(child: CityInputField());
+  Widget _buildLoading() => Center(child: CircularProgressIndicator()); 
+
+  Column _buildColumnWithData(Weather weather) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: <Widget>[
+        Text(
+          weather.cityName,
+          style: TextStyle(
+            fontSize: 40,
+            fontWeight: FontWeight.w700,
           ),
-          SizedBox(
-            width: 10,
-          ),
-          FloatingActionButton(
-            onPressed: () => _bloc.counterEventSink.add(DecrementEvent()),
-            tooltip: 'Decrement',
-            child: Icon(Icons.remove),
-          ),
-        ],
-      ),
+        ),
+        Text(
+          "${weather.temperature.toStringAsFixed(1)} °C",
+          style: TextStyle(fontSize: 80),
+        ),
+        CityInputField(),
+      ],
     );
   }
 
   @override
   void dispose() {
+    _LOG.i('In dispose()');
     super.dispose();
-    _bloc.dispose();
+    weatherBloc.close();
+  }
+}
+
+class CityInputField extends StatefulWidget {
+  const CityInputField({
+    Key key,
+  }) : super(key: key);
+
+  @override
+  _CityInputFieldState createState() => _CityInputFieldState();
+}
+
+class _CityInputFieldState extends State<CityInputField> {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 50),
+      child: TextField(
+        onSubmitted: _submitCityName,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: "Enter a city",
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          suffixIcon: Icon(Icons.search),
+        ),
+      ),
+    );
+  }
+
+  void _submitCityName(String cityName) {
+    _LOG.i("Handling button onclick.");
+    final weatherBloc = BlocProvider.of<WeatherBloc>(context);
+    weatherBloc.add(GetWeather(cityName));
   }
 }
